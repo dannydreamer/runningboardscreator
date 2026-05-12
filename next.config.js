@@ -1,8 +1,3 @@
 /** @type {import('next').NextConfig} */
-const nextConfig = {
-  experimental: {
-    serverComponentsExternalPackages: ['docx']
-  }
-}
-
+const nextConfig = {}
 module.exports = nextConfig
