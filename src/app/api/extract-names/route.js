@@ -1,7 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
 
-export const config = { api: { bodyParser: { sizeLimit: '20mb' } } };
-
 export async function POST(req) {
   try {
     const { images, texts } = await req.json();
