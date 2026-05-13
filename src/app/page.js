@@ -27,6 +27,14 @@ export default function Home() {
     setStatus({ type: 'info', msg: `נטענו ${history[name].length} שמות קיימים. הוסיפי שמות חדשים ולחצי "צרי קובץ".` });
   };
 
+  const deleteGroup = (name) => {
+    if (!confirm(`האם את בטוחה שברצונך למחוק את הקבוצה "${name}"?`)) return;
+    const next = { ...history };
+    delete next[name];
+    setHistory(next);
+    localStorage.setItem('workshopHistory', JSON.stringify(next));
+  };
+
   const addFiles = (newFiles) => {
     setFiles(prev => {
       const existing = new Set(prev.map(f => f.name));
@@ -171,7 +179,15 @@ export default function Home() {
 
         {/* Names input */}
         <div style={cardStyle}>
-          <label style={labelStyle}>שמות המשתתפים</label>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <label style={{ ...labelStyle, marginBottom: 0 }}>שמות המשתתפים</label>
+            {namesText && (
+              <button onClick={() => setNamesText('')}
+                style={{ background: 'none', border: '0.5px solid #d1d5db', borderRadius: 6, fontSize: 11, color: '#aaa', cursor: 'pointer', padding: '2px 8px' }}>
+                נקה ✕
+              </button>
+            )}
+          </div>
           <textarea
             value={namesText}
             onChange={e => setNamesText(e.target.value)}
@@ -228,10 +244,16 @@ export default function Home() {
                   <div style={{ fontSize: 14, color: '#222' }}>{name}</div>
                   <div style={{ fontSize: 12, color: '#aaa' }}>{history[name].length} שמות</div>
                 </div>
-                <button onClick={() => mergeGroup(name)}
-                  style={{ padding: '5px 12px', background: 'none', border: '0.5px solid #d1d5db', borderRadius: 8, fontSize: 12, cursor: 'pointer', color: '#555' }}>
-                  הוסף שמות ↗
-                </button>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={() => mergeGroup(name)}
+                    style={{ padding: '5px 12px', background: 'none', border: '0.5px solid #d1d5db', borderRadius: 8, fontSize: 12, cursor: 'pointer', color: '#555' }}>
+                    הוסף שמות ↗
+                  </button>
+                  <button onClick={() => deleteGroup(name)}
+                    style={{ padding: '5px 10px', background: 'none', border: '0.5px solid #fca5a5', borderRadius: 8, fontSize: 12, cursor: 'pointer', color: '#ef4444' }}>
+                    מחק
+                  </button>
+                </div>
               </div>
             ))}
           </div>
