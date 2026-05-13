@@ -152,7 +152,8 @@ export default function Home() {
     <div dir="rtl" style={{ fontFamily: 'Arial, sans-serif', minHeight: '100vh', background: '#F8F7F4', padding: '24px 16px' }}>
       <div style={{ maxWidth: 640, margin: '0 auto' }}>
 
-        <div style={{ marginBottom: 28 }}>
+        <div style={{ marginBottom: 28, textAlign: 'center' }}>
+          <img src="/logo.png" alt="לוגו" style={{ height: 80, marginBottom: 12 }} />
           <h1 style={{ fontSize: 22, fontWeight: 600, color: '#1a1a1a', margin: 0 }}>📋 נוכחות סדנאות</h1>
           <p style={{ fontSize: 13, color: '#888', marginTop: 4 }}>הוסיפי שמות, קבלי קובץ Word מסודר</p>
         </div>
