@@ -1,6 +1,7 @@
 'use client';
 import { useState, useRef, useCallback } from 'react';
 import * as XLSX from 'xlsx';
+import mammoth from 'mammoth';
 
 export default function Home() {
   const [groupName, setGroupName] = useState('');
@@ -54,6 +55,17 @@ export default function Home() {
     fr.readAsDataURL(file);
   });
 
+  const readDocx = (file) => new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onload = async e => {
+      try {
+        const result = await mammoth.extractRawText({ arrayBuffer: e.target.result });
+        res(result.value);
+      } catch(err) { rej(err); }
+    };
+    fr.readAsArrayBuffer(file);
+  });
+
   const readExcel = (file) => new Promise((res, rej) => {
     const fr = new FileReader();
     fr.onload = e => {
@@ -87,6 +99,8 @@ export default function Home() {
           images.push(await readFileAsBase64(file));
         } else if (file.name.match(/\.(xlsx|xls|csv)$/i)) {
           texts.push(await readExcel(file));
+        } else if (file.name.match(/\.docx$/i)) {
+          texts.push(await readDocx(file));
         } else {
           texts.push(await file.text());
         }
@@ -216,9 +230,9 @@ export default function Home() {
           >
             <div style={{ fontSize: 22, marginBottom: 4 }}>📎</div>
             <div>גרירה או לחיצה להעלאת קבצים</div>
-            <div style={{ fontSize: 11, marginTop: 3, color: '#aaa' }}>Excel, CSV, תמונות, טקסט</div>
+            <div style={{ fontSize: 11, marginTop: 3, color: '#aaa' }}>Excel, CSV, Word, תמונות, טקסט</div>
           </div>
-          <input ref={fileRef} type="file" multiple accept=".xlsx,.xls,.csv,image/*,.txt" style={{ display: 'none' }}
+          <input ref={fileRef} type="file" multiple accept=".xlsx,.xls,.csv,.docx,image/*,.txt" style={{ display: 'none' }}
             onChange={e => addFiles(e.target.files)} />
 
           {files.length > 0 && (
