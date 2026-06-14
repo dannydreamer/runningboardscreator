@@ -3,6 +3,8 @@ import { useState, useRef, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
 
+const ROOM_CAPS = { 1: 20, 2: 12, 3: 16 };
+
 export default function Home() {
   const [groupName, setGroupName] = useState('');
   const [namesText, setNamesText] = useState('');
@@ -13,7 +15,70 @@ export default function Home() {
     try { return JSON.parse(localStorage.getItem('workshopHistory') || '{}'); } catch { return {}; }
   });
   const [dragging, setDragging] = useState(false);
+  const [selectedRooms, setSelectedRooms] = useState(new Set());
+  const [pendingRoomData, setPendingRoomData] = useState(null);
   const fileRef = useRef();
+
+  const toggleRoom = (r) => {
+    setSelectedRooms(prev => {
+      const next = new Set(prev);
+      if (next.has(r)) next.delete(r); else next.add(r);
+      return next;
+    });
+  };
+
+  const distributeToRooms = (names, rooms) => {
+    const sorted = [...rooms].sort((a, b) => a - b);
+    const assigned = {};
+    sorted.forEach(r => assigned[r] = []);
+
+    let remaining = [...names];
+    let pool = [...sorted];
+
+    while (remaining.length > 0 && pool.length > 0) {
+      const k = pool.length;
+      const n = remaining.length;
+      const base = Math.floor(n / k);
+      const extra = n % k;
+
+      let idx = 0;
+      const nextPool = [];
+      const leftover = [];
+
+      for (let i = 0; i < pool.length; i++) {
+        const room = pool[i];
+        const alloc = base + (i < extra ? 1 : 0);
+        const cap = ROOM_CAPS[room];
+        const space = cap - assigned[room].length;
+
+        if (alloc <= space) {
+          assigned[room].push(...remaining.slice(idx, idx + alloc));
+          idx += alloc;
+          if (assigned[room].length < cap) nextPool.push(room);
+        } else {
+          assigned[room].push(...remaining.slice(idx, idx + space));
+          idx += space;
+          leftover.push(...remaining.slice(idx, idx + (alloc - space)));
+          idx += (alloc - space);
+        }
+      }
+
+      remaining = leftover;
+      pool = nextPool;
+    }
+
+    const overflow = {};
+    sorted.forEach(r => overflow[r] = []);
+
+    if (remaining.length > 0) {
+      const overflowRooms = sorted.filter(r => r !== 2);
+      for (let i = 0; i < remaining.length; i++) {
+        overflow[overflowRooms[i % overflowRooms.length]].push(remaining[i]);
+      }
+    }
+
+    return { assigned, overflow };
+  };
 
   const saveHistory = (name, names) => {
     const next = { ...history, [name]: names };
@@ -82,6 +147,29 @@ export default function Home() {
     fr.readAsArrayBuffer(file);
   });
 
+  const buildDocx = async (gName, allNames, roomData) => {
+    setStatus({ type: 'loading', msg: `יוצר קובץ Word עם ${allNames.length} שמות...` });
+    const body = roomData
+      ? { groupName: gName, names: allNames, rooms: roomData }
+      : { groupName: gName, names: allNames };
+
+    const docRes = await fetch('/api/generate-docx', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    if (!docRes.ok) throw new Error('שגיאה ביצירת קובץ');
+    const blob = await docRes.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${gName}.docx`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 3000);
+    setStatus({ type: 'success', msg: `✓ קובץ נוצר בהצלחה עם ${allNames.length} שמות!` });
+  };
+
   const generate = async () => {
     if (!groupName.trim()) {
       setStatus({ type: 'error', msg: 'לאיזו קבוצה השמות האלו שייכים?' });
@@ -89,6 +177,7 @@ export default function Home() {
     }
 
     setStatus({ type: 'loading', msg: 'מעבד קבצים...' });
+    setPendingRoomData(null);
 
     try {
       const images = [];
@@ -124,11 +213,9 @@ export default function Home() {
       if (error) throw new Error(error);
 
       let allNames = rawNames || [];
-
       if (history[groupName.trim()]) {
         allNames = [...new Set([...history[groupName.trim()], ...allNames])];
       }
-
       allNames = [...new Set(allNames)].filter(Boolean).sort((a, b) => a.localeCompare(b, 'he'));
 
       if (allNames.length === 0) {
@@ -137,25 +224,48 @@ export default function Home() {
       }
 
       saveHistory(groupName.trim(), allNames);
-      setStatus({ type: 'loading', msg: `יוצר קובץ Word עם ${allNames.length} שמות...` });
 
-      const docRes = await fetch('/api/generate-docx', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ groupName: groupName.trim(), names: allNames })
-      });
+      // No rooms selected → current behavior
+      if (selectedRooms.size === 0) {
+        await buildDocx(groupName.trim(), allNames, null);
+        return;
+      }
 
-      if (!docRes.ok) throw new Error('שגיאה ביצירת קובץ');
+      // Validate: only Room 2 selected and count > 12
+      if (selectedRooms.size === 1 && selectedRooms.has(2) && allNames.length > 12) {
+        setStatus({ type: 'error', msg: 'חדר 2 מוגבל ל-12 משתתפים. יש לבחור גם חדר 1 ו/או חדר 3 כדי להמשיך.' });
+        return;
+      }
 
-      const blob = await docRes.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${groupName.trim()}.docx`;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 3000);
+      const { assigned, overflow } = distributeToRooms(allNames, [...selectedRooms]);
 
-      setStatus({ type: 'success', msg: `✓ קובץ נוצר בהצלחה עם ${allNames.length} שמות!` });
+      const roomData = [...selectedRooms].sort((a, b) => a - b).map(r => ({
+        number: r,
+        names: assigned[r],
+        overflowNames: overflow[r]
+      }));
+
+      const overflowWarnings = roomData
+        .filter(rd => rd.overflowNames.length > 0)
+        .map(rd => `חדר ${rd.number} חצה את הקיבולת המקסימלית ב-${rd.overflowNames.length} משתתפים`);
+
+      if (overflowWarnings.length > 0) {
+        setStatus(null);
+        setPendingRoomData({ groupName: groupName.trim(), allNames, rooms: roomData, overflowWarnings });
+        return;
+      }
+
+      await buildDocx(groupName.trim(), allNames, roomData);
+    } catch (e) {
+      setStatus({ type: 'error', msg: `שגיאה: ${e.message}` });
+    }
+  };
+
+  const confirmAndGenerate = async () => {
+    const { groupName: gName, allNames, rooms } = pendingRoomData;
+    setPendingRoomData(null);
+    try {
+      await buildDocx(gName, allNames, rooms);
     } catch (e) {
       setStatus({ type: 'error', msg: `שגיאה: ${e.message}` });
     }
@@ -273,6 +383,41 @@ export default function Home() {
           </div>
         )}
 
+        {/* Room selection */}
+        <div style={cardStyle}>
+          <label style={labelStyle}>חדרים פעילים</label>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {[1, 2, 3].map(r => {
+              const active = selectedRooms.has(r);
+              return (
+                <div key={r} onClick={() => toggleRoom(r)} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 8,
+                  padding: '9px 18px', borderRadius: 24,
+                  background: active ? '#1a1a1a' : '#fff',
+                  color: active ? '#fff' : '#444',
+                  border: `1.5px solid ${active ? '#1a1a1a' : '#d1d5db'}`,
+                  cursor: 'pointer', fontSize: 14, fontFamily: 'Arial, sans-serif',
+                  userSelect: 'none', transition: 'all 0.18s',
+                  boxShadow: active ? '0 2px 8px rgba(0,0,0,0.15)' : 'none'
+                }}>
+                  <span style={{
+                    width: 16, height: 16, borderRadius: 4,
+                    border: `2px solid ${active ? '#fff' : '#c0c0c0'}`,
+                    background: active ? '#fff' : 'transparent',
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 10, color: '#1a1a1a', flexShrink: 0, transition: 'all 0.18s'
+                  }}>{active ? '✓' : ''}</span>
+                  חדר {r}
+                  <span style={{ fontSize: 11, opacity: 0.55 }}>עד {ROOM_CAPS[r]}</span>
+                </div>
+              );
+            })}
+          </div>
+          {selectedRooms.size === 0 && (
+            <p style={{ fontSize: 12, color: '#bbb', marginTop: 10, marginBottom: 0 }}>ללא בחירת חדרים — הקובץ ייוצר ללא חלוקה לחדרים</p>
+          )}
+        </div>
+
         <button onClick={generate} style={{ width: '100%', padding: '14px', background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 500, cursor: 'pointer', fontFamily: 'Arial, sans-serif' }}>
           📄 צרי קובץ Word
         </button>
@@ -281,6 +426,25 @@ export default function Home() {
           <div style={{ marginTop: 16, padding: '14px 16px', borderRadius: 10, fontSize: 14, background: sc.bg, color: sc.color, border: `1px solid ${sc.border}` }}>
             {status.type === 'loading' && <span style={{ marginLeft: 8 }}>⏳</span>}
             {status.msg}
+          </div>
+        )}
+
+        {pendingRoomData && (
+          <div style={{ marginTop: 16, padding: '16px 18px', borderRadius: 10, background: '#FFFBEB', border: '1px solid #fcd34d', color: '#92400e' }}>
+            {pendingRoomData.overflowWarnings.map((w, i) => (
+              <div key={i} style={{ fontSize: 14, marginBottom: 4 }}>
+                ⚠️ אזהרה: {w}. השמות החורגים יוצגו בצבע אדום במסמך.
+              </div>
+            ))}
+            <div style={{ fontSize: 13, color: '#78350f', marginTop: 6 }}>אפשר להמשיך וליצור את המסמך כרגיל.</div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+              <button onClick={confirmAndGenerate} style={{ padding: '9px 20px', background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: 8, fontSize: 14, cursor: 'pointer', fontFamily: 'Arial, sans-serif' }}>
+                המשיכי וצרי קובץ ←
+              </button>
+              <button onClick={() => setPendingRoomData(null)} style={{ padding: '9px 16px', background: 'none', border: '1px solid #e5c54b', borderRadius: 8, fontSize: 14, cursor: 'pointer', color: '#92400e', fontFamily: 'Arial, sans-serif' }}>
+                ביטול
+              </button>
+            </div>
           </div>
         )}
 
