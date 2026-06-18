@@ -5,6 +5,18 @@ import mammoth from 'mammoth';
 
 const ROOM_CAPS = { 1: 20, 2: 12, 3: 16 };
 
+const COLORS = ['לבן', 'אדום', 'כחול', 'שחור', 'ורוד', 'ירוק', 'סגול'];
+const FACILITATORS = [
+  'איילת השחר לוי',
+  'אביטל לוי כץ',
+  'דקלה אורן',
+  'דניאל פראג',
+  'שהירה הייקל',
+  'מיקה מרים גובר',
+  'מיה בודאי',
+  'רועי הרץ',
+];
+
 export default function Home() {
   const [groupName, setGroupName] = useState('');
   const [namesText, setNamesText] = useState('');
@@ -16,16 +28,31 @@ export default function Home() {
   });
   const [dragging, setDragging] = useState(false);
   const [selectedRooms, setSelectedRooms] = useState(new Set());
+  const [roomDetails, setRoomDetails] = useState({ 1: { color: '', facilitator: '' }, 2: { color: '', facilitator: '' }, 3: { color: '', facilitator: '' } });
   const [pendingRoomData, setPendingRoomData] = useState(null);
   const fileRef = useRef();
 
   const toggleRoom = (r) => {
     setSelectedRooms(prev => {
       const next = new Set(prev);
-      if (next.has(r)) next.delete(r); else next.add(r);
+      if (next.has(r)) {
+        next.delete(r);
+        setRoomDetails(d => ({ ...d, [r]: { color: '', facilitator: '' } }));
+      } else {
+        next.add(r);
+      }
       return next;
     });
   };
+
+  const setRoomDetail = (r, field, value) => {
+    setRoomDetails(d => ({ ...d, [r]: { ...d[r], [field]: value } }));
+  };
+
+  const usedFacilitators = (excludeRoom) =>
+    Object.entries(roomDetails)
+      .filter(([r, d]) => Number(r) !== excludeRoom && selectedRooms.has(Number(r)) && d.facilitator)
+      .map(([, d]) => d.facilitator);
 
   const distributeToRooms = (names, rooms) => {
     const sorted = [...rooms].sort((a, b) => a - b);
@@ -242,7 +269,9 @@ export default function Home() {
       const roomData = [...selectedRooms].sort((a, b) => a - b).map(r => ({
         number: r,
         names: assigned[r],
-        overflowNames: overflow[r]
+        overflowNames: overflow[r],
+        color: roomDetails[r].color,
+        facilitator: roomDetails[r].facilitator,
       }));
 
       const overflowWarnings = roomData
@@ -416,6 +445,41 @@ export default function Home() {
           {selectedRooms.size === 0 && (
             <p style={{ fontSize: 12, color: '#bbb', marginTop: 10, marginBottom: 0 }}>ללא בחירת חדרים — הקובץ ייוצר ללא חלוקה לחדרים</p>
           )}
+
+          {[1, 2, 3].filter(r => selectedRooms.has(r)).map(r => {
+            const taken = usedFacilitators(r);
+            return (
+              <div key={r} style={{ marginTop: 14, padding: '12px 14px', background: '#F9FAFB', borderRadius: 10, border: '0.5px solid #e5e7eb' }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#555', marginBottom: 10 }}>חדר {r}</div>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: 120 }}>
+                    <label style={{ fontSize: 11, color: '#aaa', display: 'block', marginBottom: 4 }}>צבע</label>
+                    <select
+                      value={roomDetails[r].color}
+                      onChange={e => setRoomDetail(r, 'color', e.target.value)}
+                      style={selectStyle}
+                    >
+                      <option value="">— בחרי צבע —</option>
+                      {COLORS.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ flex: 2, minWidth: 180 }}>
+                    <label style={{ fontSize: 11, color: '#aaa', display: 'block', marginBottom: 4 }}>מנחה</label>
+                    <select
+                      value={roomDetails[r].facilitator}
+                      onChange={e => setRoomDetail(r, 'facilitator', e.target.value)}
+                      style={selectStyle}
+                    >
+                      <option value="">— בחרי מנחה —</option>
+                      {FACILITATORS.filter(f => !taken.includes(f)).map(f => (
+                        <option key={f} value={f}>{f}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         <button onClick={generate} style={{ width: '100%', padding: '14px', background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 500, cursor: 'pointer', fontFamily: 'Arial, sans-serif' }}>
@@ -460,3 +524,4 @@ export default function Home() {
 const cardStyle = { background: '#fff', border: '0.5px solid #e5e7eb', borderRadius: 12, padding: 20, marginBottom: 16 };
 const labelStyle = { fontSize: 13, fontWeight: 500, color: '#666', display: 'block', marginBottom: 6 };
 const inputStyle = { width: '100%', padding: '10px 12px', fontSize: 15, border: '0.5px solid #d1d5db', borderRadius: 8, background: '#fff', color: '#1a1a1a', fontFamily: 'Arial, sans-serif', direction: 'rtl', outline: 'none' };
+const selectStyle = { width: '100%', padding: '8px 10px', fontSize: 13, border: '0.5px solid #d1d5db', borderRadius: 8, background: '#fff', color: '#1a1a1a', fontFamily: 'Arial, sans-serif', direction: 'rtl', outline: 'none', cursor: 'pointer' };

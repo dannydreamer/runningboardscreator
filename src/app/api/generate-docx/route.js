@@ -23,16 +23,26 @@ export async function POST(req) {
       const colW = Math.floor(contentW / numCols);
 
       // Header row
-      const headerCells = orderedRooms.map(room => new TableCell({
-        width: { size: colW, type: WidthType.DXA },
-        borders,
-        margins: { top: 100, bottom: 100, left: 120, right: 120 },
-        shading: { fill: 'F3F4F6', type: 'clear' },
-        children: [new Paragraph({
-          alignment: AlignmentType.CENTER,
-          children: [new TextRun({ text: `חדר ${room.number}`, font: 'Arial', size: 24, bold: true, color: '374151' })]
-        })]
-      }));
+      const headerCells = orderedRooms.map(room => {
+        const subParts = [room.color, room.facilitator].filter(Boolean).join(' | ');
+        return new TableCell({
+          width: { size: colW, type: WidthType.DXA },
+          borders,
+          margins: { top: 100, bottom: 100, left: 120, right: 120 },
+          shading: { fill: 'F3F4F6', type: 'clear' },
+          children: [
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { after: subParts ? 60 : 0 },
+              children: [new TextRun({ text: `חדר ${room.number}`, font: 'Arial', size: 24, bold: true, color: '374151' })]
+            }),
+            ...(subParts ? [new Paragraph({
+              alignment: AlignmentType.CENTER,
+              children: [new TextRun({ text: subParts, font: 'Arial', size: 18, color: '6B7280' })]
+            })] : [])
+          ]
+        });
+      });
 
       const maxRows = Math.max(...orderedRooms.map(r => r.names.length + r.overflowNames.length));
       const contentRows = [];
