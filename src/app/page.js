@@ -235,9 +235,13 @@ export default function Home() {
         body: JSON.stringify({ images, texts: texts.filter(Boolean) })
       });
 
-      if (!extractRes.ok) throw new Error('שגיאה בחילוץ שמות');
+      if (!extractRes.ok) {
+        let detail = `סטטוס ${extractRes.status}`;
+        try { const body = await extractRes.json(); detail = body.error || JSON.stringify(body); } catch {}
+        throw new Error(`שגיאה בחילוץ שמות: ${detail}`);
+      }
       const { names: rawNames, error } = await extractRes.json();
-      if (error) throw new Error(error);
+      if (error) throw new Error(`שגיאה בחילוץ שמות: ${error}`);
 
       let allNames = rawNames || [];
       if (history[groupName.trim()]) {
